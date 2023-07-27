@@ -104,6 +104,7 @@ if __name__ == "__main__":
 
     GT_york = f"/home/dxl/Data/york/valid/*_label.npz"
     GT_huang = f"/home/dxl/Data/wireframe/valid/*_label.npz"
+    GT_roofLine = f"./data/test_gt/*_label.npz"
 
     print(args["--mode"])
     if args["--mode"] == "shanghaiTech":
@@ -124,6 +125,13 @@ if __name__ == "__main__":
         batch_sAP_s1(args["<path>"], GT, args["--mode"])
 
         # -------------------------
+        C.model.nlines = 1000
+        C.model.s_nms = 2
+        batch_sAP_s1(args["<path>"], GT, args["--mode"] + "_nline1k_snms2")
+    elif args["--mode"] == "roofLine":
+        GT = GT_roofLine
+        batch_sAP_s1(args["<path>"], GT, args["--mode"])
+
         C.model.nlines = 1000
         C.model.s_nms = 2
         batch_sAP_s1(args["<path>"], GT, args["--mode"] + "_nline1k_snms2")
