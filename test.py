@@ -26,6 +26,7 @@ from skimage import io
 
 import matplotlib as mpl
 mpl.use('Qt5Agg')
+import cv2
 import matplotlib.pyplot as plt
 import numpy as np
 import torch
@@ -41,8 +42,9 @@ from FClip.models.stage_1 import FClip
 
 
 _PLOT_nlines = 100
-_PLOT = False
+_PLOT = True
 _NPZ = True
+TRAIN_IMAGE_SIZE = 512
 PLTOPTS = {"color": "#33FFFF", "s": 1.2, "edgecolors": "none", "zorder": 5}
 cmap = plt.get_cmap("jet")
 norm = mpl.colors.Normalize(vmin=0.9, vmax=1.0)
@@ -67,6 +69,17 @@ def imshow(im):
 
 def c(x):
     return sm.to_rgba(x)
+
+
+def get_color(x):
+    if x >= 0.9:
+        return [0, 0, 255]
+    elif x >= 0.8:
+        return [0, 255, 0]
+    elif x >= 0.7:
+        return [255, 0, 0]
+    else:
+        return[0, 0, 0]
 
 
 def build_model(cpu=False):
@@ -158,7 +171,8 @@ def main():
 
     # 2. model
     model = build_model()
-    model.cuda()
+    if torch.cuda.is_available():
+        model.cuda()
 
     outdir = args["--identifier"]
     print("outdir:", outdir)
@@ -178,7 +192,7 @@ def main():
     with torch.no_grad():
         for batch_idx, (image, meta, target) in enumerate(val_loader):
             input_dict = {
-                "image": image.cuda(),
+                "image": image.cuda() if torch.cuda.is_available() else image,
             }
             eval_t = time.time()
             result = model(input_dict, isTest=True)
@@ -199,22 +213,17 @@ def main():
                     )
                 if _PLOT:
                     lines, score = H["lines"][i].cpu().numpy() * 4, H["score"][i].cpu().numpy()
-                    plt.gca().set_axis_off()
-                    plt.subplots_adjust(top=1, bottom=0, right=1, left=0, hspace=0, wspace=0)
-                    plt.margins(0, 0)
-
                     iname = val_loader.dataset._get_im_name(index)
-                    im = io.imread(iname)
-                    imshow(im)
-                    for (a, b), s in zip(lines[:_PLOT_nlines], score[:_PLOT_nlines]):
-                        plt.plot([a[1], b[1]], [a[0], b[0]], color="orange", linewidth=0.5, zorder=s)
-                        plt.scatter(a[1], a[0], **PLTOPTS)
-                        plt.scatter(b[1], b[0], **PLTOPTS)
-                    plt.gca().xaxis.set_major_locator(plt.NullLocator())
-                    plt.gca().yaxis.set_major_locator(plt.NullLocator())
+                    dump_image = cv2.imread(iname)
 
-                    plt.savefig(f"{outdir}/viz/{index:06}.pdf", bbox_inches="tight", pad_inches=0.0, dpi=3000)
-                    plt.close()
+                    hratio, wratio = len(dump_image) / TRAIN_IMAGE_SIZE, len(dump_image[0]) / TRAIN_IMAGE_SIZE
+                    for (a, b), s in zip(lines[:_PLOT_nlines], score[:_PLOT_nlines]):
+                        if s < 0.5:
+                            continue
+                        (y1, y2) = map(lambda var: round(var * wratio), (a[0], b[0]))
+                        (x1, x2) = map(lambda var: round(var * hratio), (a[1], b[1]))
+                        cv2.line(dump_image, (x1, y1), (x2, y2), get_color(s), 2)
+                    cv2.imwrite(f"{outdir}/viz/{os.path.basename(iname)}", dump_image)
 
             extra_info = result["extra_info"]
             eval_time['time_front'] += extra_info['time_front']

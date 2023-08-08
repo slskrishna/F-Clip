@@ -26,6 +26,8 @@ def collate(batch):
 class LineDataset(Dataset):
     def __init__(self, rootdir, split, dataset="shanghaiTech"):
         print("dataset:", dataset)
+        if split == 'valid':
+            split = 'test'
         self.rootdir = rootdir
         if dataset in ["shanghaiTech", "york"]:
             filelist = glob.glob(f"{rootdir}/{split}/*_label.npz")
@@ -33,6 +35,8 @@ class LineDataset(Dataset):
         elif dataset in ['roofLine']:
             json_file = f"../ARD/{split}.json"
             self.images_path = f"../ARD/{split}/"
+            json_file = f"../hawp/data/wireframe/test.json"
+            self.images_path = f"../hawp/data/wireframe/images/"
             self.data = json.load(open(json_file))
             filelist = [os.path.join(self.images_path, data['filename']) for data in self.data]
             filelist.sort()
@@ -43,6 +47,8 @@ class LineDataset(Dataset):
         self.dataset = dataset
         self.split = split
         self.filelist = filelist
+        self.C = C
+        self.M = M
 
     def __len__(self):
         return len(self.filelist)
@@ -62,14 +68,14 @@ class LineDataset(Dataset):
         image_ = transform.resize(image_, (512, 512))
 
         target = {}
-        if M.stage1 == "fclip":
+        if self.M.stage1 == "fclip":
             gt_path = self.filelist[idx]
             if self.dataset == 'roofLine':
                 gt_path = f"./data/{self.split}_gt/{os.path.basename(gt_path)}_label.npz"
             # step 1 load npz
             lcmap, lcoff, lleng, angle = WireframeHuangKun.fclip_parsing(
                 gt_path.replace("label", "line"),
-                M.ang_type
+                self.M.ang_type
             )
             with np.load(gt_path) as npz:
                 lpos = npz["lpos"][:, :, :2]
@@ -81,8 +87,7 @@ class LineDataset(Dataset):
 
             # step 2 crop augment
             if self.split == "train":
-                if M.crop:
-
+                if self.M.crop:
                     s = np.random.choice(np.arange(0.9, M.crop_factor, 0.1))
                     image_t, lcmap, lcoff, lleng, angle, cropped_lines, cropped_region \
                         = CropAugmentation.random_crop_augmentation(image_, lpos, s)
@@ -90,9 +95,9 @@ class LineDataset(Dataset):
                     lpos = cropped_lines
 
             # step 3 resize
-            if M.resolution < 128:
+            if self.M.resolution < 128:
                 image_, lcmap, lcoff, lleng, angle = ResizeResolution.resize(
-                    lpos=lpos, image=image_, resolu=M.resolution)
+                    lpos=lpos, image=image_, resolu=self.M.resolution)
 
             target["lcmap"] = torch.from_numpy(lcmap).float()
             target["lcoff"] = torch.from_numpy(lcoff).float()
@@ -102,7 +107,7 @@ class LineDataset(Dataset):
         else:
             raise NotImplementedError
 
-        image = (image_ - M.image.mean) / M.image.stddev
+        image = (image_ - self.M.image.mean) / self.M.image.stddev
         image = np.rollaxis(image, 2).copy()
 
         return torch.from_numpy(image).float(), meta, target
