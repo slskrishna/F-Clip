@@ -78,7 +78,7 @@ def line_center_score(path, GT, threshold=5, confidence_threshold=0.5, csv_file_
     lcnn_tp = np.cumsum(tps[index]) / n_gt
     lcnn_fp = np.cumsum(fps[index]) / n_gt
 
-    return FClip.metric.ap(lcnn_tp, lcnn_fp) * 100, np.mean(f1score), np.mean(precision), np.mean(recall)
+    return FClip.metric.ap(lcnn_tp, lcnn_fp) * 100, np.mean(precision), np.mean(recall), np.mean(f1_score)
 
 
 def batch_sAP_s1(paths, GT, dataname):

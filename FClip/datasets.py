@@ -10,6 +10,7 @@ from torch.utils.data import Dataset
 from torch.utils.data.dataloader import default_collate
 
 from FClip.config import M, C
+from FClip.models.augmentations import Augmentations
 from dataset.input_parsing import WireframeHuangKun
 from dataset.crop import CropAugmentation
 from dataset.resolution import ResizeResolution
@@ -35,8 +36,7 @@ class LineDataset(Dataset):
         elif dataset in ['roofLine']:
             json_file = f"../ARD/{split}.json"
             self.images_path = f"../ARD/{split}/"
-            json_file = f"../hawp/data/wireframe/test.json"
-            self.images_path = f"../hawp/data/wireframe/images/"
+
             self.data = json.load(open(json_file))
             filelist = [os.path.join(self.images_path, data['filename']) for data in self.data]
             filelist.sort()
@@ -49,6 +49,7 @@ class LineDataset(Dataset):
         self.filelist = filelist
         self.C = C
         self.M = M
+        self.aug = Augmentations()
 
     def __len__(self):
         return len(self.filelist)
@@ -65,7 +66,11 @@ class LineDataset(Dataset):
     def __getitem__(self, idx):
         iname = self._get_im_name(idx)
         image_ = io.imread(iname).astype(float)[:, :, :3]
-        image_ = transform.resize(image_, (512, 512))
+        if self.split == 'train':
+            image_ = self.aug.apply_augmentations(image_, os.path.basename(iname))
+            image_ = cv2.resize(image_[0].astype('uint8'), (512, 512))
+        else:
+            image_ = transform.resize(image_, (512, 512))
 
         target = {}
         if self.M.stage1 == "fclip":
